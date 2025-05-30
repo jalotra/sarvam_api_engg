@@ -1,0 +1,26 @@
+{{- if and .Values.kafka.enabled .Values.kafka.zookeeper.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-zookeeper
+spec:
+  replicas: {{ .Values.kafka.zookeeper.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "conversational-ai-scylladb.fullname" . }}-zookeeper
+  template:
+    metadata:
+      labels:
+        app: {{ include "conversational-ai-scylladb.fullname" . }}-zookeeper
+    spec:
+      containers:
+      - name: zookeeper
+        image: confluentinc/cp-zookeeper:7.5.0
+        ports:
+        - containerPort: 2181
+        env:
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: "2181"
+        - name: ZOOKEEPER_TICK_TIME
+          value: "2000"
+{{- end }}

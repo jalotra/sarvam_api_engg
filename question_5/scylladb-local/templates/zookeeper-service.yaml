@@ -1,0 +1,12 @@
+{{- if and .Values.kafka.enabled .Values.kafka.zookeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-zookeeper
+spec:
+  ports:
+  - port: 2181
+    targetPort: 2181
+  selector:
+    app: {{ include "conversational-ai-scylladb.fullname" . }}-zookeeper
+{{- end }}

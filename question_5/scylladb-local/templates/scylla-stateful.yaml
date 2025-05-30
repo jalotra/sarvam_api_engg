@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}
+  labels:
+    {{- include "conversational-ai-scylladb.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "conversational-ai-scylladb.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "conversational-ai-scylladb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "conversational-ai-scylladb.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: scylla
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 9042
+          name: cql
+        - containerPort: 9180
+          name: prometheus
+        env:
+        - name: SCYLLA_CLUSTER_NAME
+          value: {{ .Values.config.clusterName }}
+        - name: SCYLLA_DC
+          value: {{ .Values.config.datacenter }}
+        - name: SCYLLA_RACK
+          value: {{ .Values.config.rack }}
+        - name: SCYLLA_ENDPOINT_SNITCH
+          value: {{ .Values.config.endpointSnitch }}
+        - name: SCYLLA_CDC_ENABLED
+          value: "{{ .Values.config.cdcEnabled }}"
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/scylla
+        - name: commitlog
+          mountPath: /var/lib/scylla/commitlog
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - nodetool status | grep UN
+          initialDelaySeconds: 90
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - cqlsh -e "SELECT * FROM system.local"
+          initialDelaySeconds: 60
+          periodSeconds: 10
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: {{ include "conversational-ai-scylladb.fullname" . }}-init
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.storageClass }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.size }}
+  - metadata:
+      name: commitlog
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.storageClass }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.commitlogSize }}

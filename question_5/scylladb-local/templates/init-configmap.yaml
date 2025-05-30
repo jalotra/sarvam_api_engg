@@ -1,0 +1,52 @@
+# templates/init-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-init
+data:
+  01-create-keyspace.cql: |
+    CREATE KEYSPACE IF NOT EXISTS conversational_ai
+    WITH replication = {
+      'class': 'SimpleStrategy',
+      'replication_factor': {{ .Values.replicaCount }}
+    }
+    AND durable_writes = true;
+    
+    USE conversational_ai;
+    
+    -- Conversation turns table
+    CREATE TABLE IF NOT EXISTS conversation_turns (
+        session_id text,
+        turn_id text,
+        turn_timestamp timestamp,
+        turn_type text,
+        parent_turn_id text,
+        active_child_id text,
+        liked boolean,
+        prompt text,
+        account_id text,
+        session_title text,
+        PRIMARY KEY ((session_id), turn_timestamp, turn_id)
+    ) WITH CLUSTERING ORDER BY (turn_timestamp ASC, turn_id ASC)
+    AND cdc = {'enabled': {{ .Values.config.cdcEnabled | toString | lower }}};
+    
+    -- Steps table
+    CREATE TABLE IF NOT EXISTS steps (
+        session_id text,
+        agent_turn_id text,
+        step_index int,
+        step_type int,
+        content text,
+        created_at timestamp,
+        account_id text,
+        PRIMARY KEY ((session_id, agent_turn_id), step_index)
+    ) WITH CLUSTERING ORDER BY (step_index ASC)
+    AND cdc = {'enabled': {{ .Values.config.cdcEnabled | toString | lower }}};
+    
+    -- Materialized view for account queries
+    CREATE MATERIALIZED VIEW IF NOT EXISTS turns_by_account AS
+        SELECT * FROM conversation_turns
+        WHERE account_id IS NOT NULL AND turn_type IS NOT NULL AND session_id IS NOT NULL AND turn_timestamp IS NOT NULL AND turn_id IS NOT NULL
+        PRIMARY KEY ((account_id), turn_timestamp, session_id, turn_id)
+        WITH CLUSTERING ORDER BY (turn_timestamp DESC);
+

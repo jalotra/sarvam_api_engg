@@ -1,0 +1,12 @@
+{{- if .Values.debezium.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-debezium
+spec:
+  ports:
+  - port: 8083
+    targetPort: 8083
+  selector:
+    app: {{ include "conversational-ai-scylladb.fullname" . }}-debezium
+{{- end }}

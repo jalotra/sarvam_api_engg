@@ -1,0 +1,64 @@
+{{- if .Values.debezium.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-connector-setup
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: connector-setup
+        image: curlimages/curl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Wait for Debezium Connect to be ready
+          until curl -f http://{{ include "conversational-ai-scylladb.fullname" . }}-debezium:8083/; do
+            echo "Waiting for Debezium Connect..."
+            sleep 5
+          done
+          
+          # Create PostgreSQL source connector
+          curl -X POST http://{{ include "conversational-ai-scylladb.fullname" . }}-debezium:8083/connectors \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "postgres-source-connector",
+              "config": {
+                "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+                "database.hostname": "postgres-host",
+                "database.port": "5432",
+                "database.user": "postgres",
+                "database.password": "postgres",
+                "database.dbname": "conversational_ai",
+                "database.server.name": "postgres",
+                "table.include.list": "public.agent_turns,public.human_turns,public.steps",
+                "plugin.name": "pgoutput",
+                "publication.autocreate.mode": "filtered",
+                "topic.prefix": "cdc"
+              }
+            }'
+          
+          # Create ScyllaDB sink connector
+          curl -X POST http://{{ include "conversational-ai-scylladb.fullname" . }}-debezium:8083/connectors \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "scylla-sink-connector",
+              "config": {
+                "connector.class": "com.scylladb.cdc.kafka.connect.ScyllaSinkConnector",
+                "scylla.contact.points": "{{ include "conversational-ai-scylladb.fullname" . }}:9042",
+                "scylla.keyspace": "conversational_ai",
+                "topics": "cdc.postgres.public.agent_turns,cdc.postgres.public.human_turns,cdc.postgres.public.steps",
+                "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+                "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+                "transforms": "route",
+                "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+                "transforms.route.regex": "cdc.postgres.public.(.*)",
+                "transforms.route.replacement": "$1"
+              }
+            }'
+{{- end }}

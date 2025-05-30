@@ -1,0 +1,12 @@
+{{- if .Values.kafka.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "conversational-ai-scylladb.fullname" . }}-kafka
+spec:
+  ports:
+  - port: 9092
+    targetPort: 9092
+  selector:
+    app: {{ include "conversational-ai-scylladb.fullname" . }}-kafka
+{{- end }}
